@@ -1,23 +1,40 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { MongoClient } from 'mongodb'
 
-const DATA_DIR = path.resolve(import.meta.dirname, 'data')
-const DATA_FILE = path.join(DATA_DIR, 'registros.json')
+const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017'
+const BASE = process.env.MONGODB_DB || 'PAGOS'
+const ARCHIVO_ANTIGUO = path.resolve(import.meta.dirname, 'data', 'registros.json')
+const MONTOS = { completo: 40000, medio: 20000 }
+const SIN_ID = { projection: { _id: 0 } }
 
-const leer = () => {
-  try {
-    const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
+let conexion
+
+// Conecta una sola vez; si MongoDB está apagado, el próximo pedido vuelve a intentarlo.
+const coleccion = () => {
+  conexion ??= (async () => {
+    const cliente = new MongoClient(URI, { serverSelectionTimeoutMS: 3000 })
+    await cliente.connect()
+    const col = cliente.db(BASE).collection('registros')
+    await col.createIndex({ id: 1 }, { unique: true })
+    await importarArchivoAntiguo(col)
+    return col
+  })().catch((e) => {
+    conexion = undefined
+    throw e
+  })
+  return conexion
 }
 
-const escribir = (registros) => {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  const tmp = DATA_FILE + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(registros, null, 2))
-  fs.renameSync(tmp, DATA_FILE)
+// Pasa a MongoDB los registros que se guardaban antes en data/registros.json (no duplica).
+const importarArchivoAntiguo = async (col) => {
+  if (!fs.existsSync(ARCHIVO_ANTIGUO)) return
+  const antiguos = JSON.parse(fs.readFileSync(ARCHIVO_ANTIGUO, 'utf8'))
+  if (!Array.isArray(antiguos) || !antiguos.length) return
+  await col.bulkWrite(
+    antiguos.map((r) => ({ updateOne: { filter: { id: r.id }, update: { $setOnInsert: r }, upsert: true } })),
+  )
+  fs.renameSync(ARCHIVO_ANTIGUO, ARCHIVO_ANTIGUO + '.importado')
 }
 
 const leerBody = (req) =>
@@ -34,10 +51,6 @@ const responder = (res, status, data) => {
   res.end(JSON.stringify(data))
 }
 
-const MONTOS = { completo: 40000, medio: 20000 }
-
-const normalizar = (r) => ({ ...r, pagado: r.pagado === true })
-
 const esFechaValida = (iso) => {
   if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
   const [y, m, d] = iso.split('-').map(Number)
@@ -45,44 +58,47 @@ const esFechaValida = (iso) => {
   return f.getFullYear() === y && f.getMonth() === m - 1 && f.getDate() === d
 }
 
-const middleware = async (req, res, next) => {
+export const manejarApi = async (req, res, next) => {
   if (!req.url?.startsWith('/api/registros')) return next()
+  // Permite que la página publicada en GitHub Pages use esta API desde el mismo PC.
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Private-Network', 'true')
+  if (req.method === 'OPTIONS') return res.writeHead(204).end()
+
+  let col
+  try {
+    col = await coleccion()
+  } catch {
+    return responder(res, 503, { error: 'MongoDB no está encendido' })
+  }
+
   try {
     const id = decodeURIComponent(req.url.split('?')[0].split('/')[3] ?? '')
 
-    if (req.method === 'GET') return responder(res, 200, leer().map(normalizar))
+    if (req.method === 'GET') return responder(res, 200, await col.find({}, SIN_ID).toArray())
 
     if (req.method === 'PATCH') {
       const { pagado } = JSON.parse((await leerBody(req)) || '{}')
       if (typeof pagado !== 'boolean') return responder(res, 400, { error: 'Estado inválido' })
-      const registros = leer()
       if (id) {
-        const registro = registros.find((r) => r.id === id)
-        if (!registro) return responder(res, 404, { error: 'Registro no encontrado' })
-        registro.pagado = pagado
+        const { matchedCount } = await col.updateOne({ id }, { $set: { pagado } })
+        if (!matchedCount) return responder(res, 404, { error: 'Registro no encontrado' })
       } else {
-        for (const r of registros) r.pagado = pagado
+        await col.updateMany({}, { $set: { pagado } })
       }
-      escribir(registros)
-      return responder(res, 200, registros.map(normalizar))
+      return responder(res, 200, { ok: true })
     }
 
     if (req.method === 'DELETE') {
-      const registros = leer()
-      const restantes = registros.filter((r) => r.id !== id)
-      if (!id || restantes.length === registros.length) {
-        return responder(res, 404, { error: 'Registro no encontrado' })
-      }
-      escribir(restantes)
-      return responder(res, 200, { ok: true })
+      const { deletedCount } = id ? await col.deleteOne({ id }) : { deletedCount: 0 }
+      return responder(res, deletedCount ? 200 : 404, { ok: deletedCount > 0 })
     }
 
     if (req.method === 'POST') {
       const { id: nuevoId, creado, fecha, tipo, motivo, pagado } = JSON.parse(await leerBody(req))
-      const valida = esFechaValida(fecha)
-      if (!valida || !MONTOS[tipo]) {
-        return responder(res, 400, { error: 'Datos inválidos' })
-      }
+      if (!esFechaValida(fecha) || !MONTOS[tipo]) return responder(res, 400, { error: 'Datos inválidos' })
       if (tipo === 'medio' && !String(motivo ?? '').trim()) {
         return responder(res, 400, { error: 'Motivo requerido' })
       }
@@ -95,15 +111,12 @@ const middleware = async (req, res, next) => {
         motivo: tipo === 'medio' ? String(motivo).trim() : '',
         pagado: pagado === true,
       }
-      const registros = leer()
-      if (!registros.some((r) => r.id === registro.id)) {
-        registros.push(registro)
-        escribir(registros)
-      }
+      await col.updateOne({ id: registro.id }, { $setOnInsert: registro }, { upsert: true })
       return responder(res, 201, registro)
     }
     responder(res, 405, { error: 'Método no permitido' })
-  } catch {
+  } catch (e) {
+    console.error(e)
     responder(res, 500, { error: 'Error del servidor' })
   }
 }
@@ -112,10 +125,10 @@ export default function registrosApi() {
   return {
     name: 'registros-api',
     configureServer(server) {
-      server.middlewares.use(middleware)
+      server.middlewares.use(manejarApi)
     },
     configurePreviewServer(server) {
-      server.middlewares.use(middleware)
+      server.middlewares.use(manejarApi)
     },
   }
 }
