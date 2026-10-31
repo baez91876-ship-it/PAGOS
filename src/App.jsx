@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  borrarDatosLocales,
+  configurado,
+  ejecutarOperacion,
+  encolar,
+  esErrorDeRed,
+  guardarRespaldo,
+  obtenerRegistros,
+  supabase,
+} from './datos.js'
 
-const API = '/api/registros'
 const MONTOS = { completo: 40000, medio: 20000 }
 const ETIQUETAS = { completo: 'Día completo', medio: 'Medio día' }
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -34,61 +43,6 @@ const nombreMes = (anio, mes) =>
   `${capitalizar(new Date(anio, mes, 1).toLocaleString('es-CO', { month: 'long' }))} ${anio}`
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
-
-const COLA = 'pagos-cola-sincronizar'
-const RESPALDO = 'pagos-respaldo'
-
-const leerLocal = (clave) => {
-  try {
-    const v = JSON.parse(localStorage.getItem(clave))
-    return Array.isArray(v) ? v : []
-  } catch {
-    return []
-  }
-}
-
-const guardarLocal = (clave, valor) => {
-  try {
-    localStorage.setItem(clave, JSON.stringify(valor))
-  } catch {
-    // Sin espacio o almacenamiento bloqueado: el archivo del servidor sigue siendo la copia principal.
-  }
-}
-
-// Lanza un error con `status` si el servidor rechazó la petición; sin `status` si no hubo conexión.
-const enviar = async ({ method, url, body }) => {
-  const res = await fetch(url, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (method === 'DELETE' && res.status === 404) return null
-  if (!res.ok) throw Object.assign(new Error('Error del servidor'), { status: res.status })
-  return res.json()
-}
-
-// Envía al servidor los cambios hechos mientras no había conexión.
-const sincronizarCola = async () => {
-  const cola = leerLocal(COLA)
-  while (cola.length) {
-    try {
-      await enviar(cola[0])
-    } catch (e) {
-      if (!e.status || e.status >= 500) throw e
-    }
-    cola.shift()
-    guardarLocal(COLA, cola)
-  }
-}
-
-const obtenerRegistros = async () => {
-  try {
-    await sincronizarCola()
-    return { datos: await enviar({ method: 'GET', url: API }), desconectado: false }
-  } catch {
-    return { datos: leerLocal(RESPALDO), desconectado: true }
-  }
-}
 
 // Convierte "dd/mm/aaaa" en "aaaa-mm-dd"; devuelve '' si la fecha no existe.
 const leerFechaEscrita = (texto) => {
@@ -248,7 +202,7 @@ function Calendario({ vista, onCambiarMes, porFecha, fecha, onElegir }) {
   )
 }
 
-export default function App() {
+function Panel({ usuario, onSalir }) {
   const [registros, setRegistros] = useState([])
   const [cargando, setCargando] = useState(true)
   const [fecha, setFecha] = useState(hoy)
@@ -261,6 +215,7 @@ export default function App() {
   const [ocupado, setOcupado] = useState('')
   const [sinServidor, setSinServidor] = useState(false)
   const [aviso, setAviso] = useState('')
+  const [locales, setLocales] = useState([])
   const [selectorAbierto, setSelectorAbierto] = useState(false)
   const [vista, setVista] = useState(() => {
     const d = new Date()
@@ -268,9 +223,10 @@ export default function App() {
   })
   const refFecha = useRef(null)
 
-  const aplicarCarga = useCallback(({ datos, desconectado }) => {
+  const aplicarCarga = useCallback(({ datos, desconectado, error: fallo }) => {
     setRegistros(datos)
     setSinServidor(desconectado)
+    if (fallo) setError(`No se pudieron cargar los registros: ${fallo}`)
     setCargando(false)
   }, [])
 
@@ -279,6 +235,20 @@ export default function App() {
   useEffect(() => {
     obtenerRegistros().then(aplicarCarga)
   }, [aplicarCarga])
+
+  // Solo en el PC (npm run dev): registros del archivo data/registros.json que aún no están en la nube.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    fetch('/api/registros')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((lista) => setLocales(Array.isArray(lista) ? lista : []))
+      .catch(() => {})
+  }, [])
+
+  const porSubir = useMemo(() => {
+    const ids = new Set(registros.map((r) => r.id))
+    return cargando || sinServidor ? [] : locales.filter((r) => !ids.has(r.id))
+  }, [locales, registros, cargando, sinServidor])
 
   useEffect(() => {
     if (!sinServidor) return
@@ -291,7 +261,7 @@ export default function App() {
   }, [sinServidor, recargar])
 
   useEffect(() => {
-    if (!cargando) guardarLocal(RESPALDO, registros)
+    if (!cargando) guardarRespaldo(registros)
   }, [registros, cargando])
 
   useEffect(() => {
@@ -300,18 +270,30 @@ export default function App() {
     return () => clearTimeout(id)
   }, [aviso])
 
-  // Si no hay conexión, guarda la operación para enviarla después y aplica el cambio en pantalla.
+  // Si no hay conexión, guarda la operación para enviarla después. En ambos casos aplica el cambio en pantalla.
   const ejecutar = async (op, aplicarLocal) => {
     try {
-      const respuesta = await enviar(op)
+      await ejecutarOperacion(op)
       setSinServidor(false)
-      return respuesta
     } catch (e) {
-      if (e.status) throw e
-      guardarLocal(COLA, [...leerLocal(COLA), op])
+      if (!esErrorDeRed(e)) throw e
+      encolar(op)
       setSinServidor(true)
-      aplicarLocal()
-      return undefined
+    }
+    aplicarLocal()
+  }
+
+  const subirLocales = async () => {
+    setOcupado('subir')
+    setError('')
+    try {
+      for (const r of porSubir) await ejecutarOperacion({ accion: 'crear', registro: r })
+      await recargar()
+      setAviso(`${plural(porSubir.length, 'registro subido', 'registros subidos')} a la nube.`)
+    } catch (e) {
+      setError(`No se pudieron subir los registros: ${e.message}`)
+    } finally {
+      setOcupado('')
     }
   }
 
@@ -397,10 +379,7 @@ export default function App() {
       motivo: tipo === 'medio' ? motivo.trim() : '',
     }
     try {
-      const registro = await ejecutar({ method: 'POST', url: API, body: nuevo }, () =>
-        setRegistros((prev) => [...prev, nuevo]),
-      )
-      if (registro) setRegistros((prev) => [...prev, registro])
+      await ejecutar({ accion: 'crear', registro: nuevo }, () => setRegistros((prev) => [...prev, nuevo]))
       setAviso(`${ETIQUETAS[tipo]} guardado (${pagado ? 'pagado' : 'pendiente'}).`)
       setMotivo('')
       setTipo('completo')
@@ -418,11 +397,9 @@ export default function App() {
     setOcupado(id || 'todos')
     setError('')
     try {
-      const datos = await ejecutar(
-        { method: 'PATCH', url: id ? `${API}/${encodeURIComponent(id)}` : API, body: { pagado: nuevoEstado } },
-        () => setRegistros((prev) => prev.map((r) => (!id || r.id === id ? { ...r, pagado: nuevoEstado } : r))),
+      await ejecutar({ accion: 'pago', id, pagado: nuevoEstado }, () =>
+        setRegistros((prev) => prev.map((r) => (!id || r.id === id ? { ...r, pagado: nuevoEstado } : r))),
       )
-      if (datos) setRegistros(datos)
     } catch {
       setError('No se pudo actualizar el estado del pago. Intenta de nuevo.')
     } finally {
@@ -440,8 +417,7 @@ export default function App() {
     setOcupado(r.id)
     setError('')
     try {
-      await ejecutar({ method: 'DELETE', url: `${API}/${encodeURIComponent(r.id)}` }, () => {})
-      setRegistros((prev) => prev.filter((x) => x.id !== r.id))
+      await ejecutar({ accion: 'eliminar', id: r.id }, () => setRegistros((prev) => prev.filter((x) => x.id !== r.id)))
     } catch {
       setError('No se pudo eliminar el registro. Intenta de nuevo.')
     } finally {
@@ -478,22 +454,44 @@ export default function App() {
   )
 
   return (
-    <div className="min-h-screen bg-[#eef0f4] p-3 text-white sm:p-6">
+    <div className="min-h-screen bg-[#0f1729] p-3 text-white sm:p-6">
       <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
-        <header className={`${panel} flex items-center gap-3 px-5 py-4`}>
+        <header className={`${panel} flex flex-wrap items-center gap-3 px-5 py-4`}>
           <Icono d={ICONOS.tarjeta} relleno className="h-7 w-7 text-yellow-400" />
           <span className="text-2xl font-extrabold tracking-wide text-yellow-400">PAGOS</span>
+          <span className="ml-auto hidden text-sm text-gray-400 sm:inline">{usuario.email}</span>
+          <button
+            type="button"
+            onClick={onSalir}
+            className="ml-auto rounded-md border border-white/20 px-3 py-1.5 text-sm text-gray-200 hover:bg-white/10 sm:ml-0"
+          >
+            Cerrar sesión
+          </button>
         </header>
 
         {sinServidor && (
-          <p role="status" className="rounded-lg border border-yellow-500 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
-            El servidor no está encendido. Los cambios se guardan en este navegador y se pasarán al archivo de datos
-            cuando lo enciendas (doble clic en <strong>iniciar.bat</strong>).
+          <p role="status" className="rounded-lg border border-yellow-400/50 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-200">
+            Sin conexión a internet. Los cambios se guardan en este dispositivo y se subirán a la nube cuando vuelva la
+            conexión.
           </p>
         )}
 
+        {porSubir.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-yellow-400/50 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-200">
+            <span>Hay {plural(porSubir.length, 'registro', 'registros')} en el archivo local que aún no están en la nube.</span>
+            <button
+              type="button"
+              disabled={!!ocupado}
+              onClick={subirLocales}
+              className="rounded-md bg-yellow-400 px-3 py-1.5 font-semibold text-black hover:bg-yellow-300 disabled:opacity-50"
+            >
+              {ocupado === 'subir' ? 'Subiendo...' : 'Subir a la nube'}
+            </button>
+          </div>
+        )}
+
         {error && (
-          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p role="alert" className="rounded-lg border border-red-400/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {error}
           </p>
         )}
@@ -735,4 +733,103 @@ export default function App() {
       </div>
     </div>
   )
+}
+
+function Pantalla({ children }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#0f1729] p-4 text-white">
+      <div className={`${panel} w-full max-w-sm p-6`}>
+        <div className="mb-5 flex items-center gap-3">
+          <Icono d={ICONOS.tarjeta} relleno className="h-7 w-7 text-yellow-400" />
+          <span className="text-2xl font-extrabold tracking-wide text-yellow-400">PAGOS</span>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Ingreso() {
+  const [correo, setCorreo] = useState('')
+  const [clave, setClave] = useState('')
+  const [error, setError] = useState('')
+  const [entrando, setEntrando] = useState(false)
+
+  const entrar = async (e) => {
+    e.preventDefault()
+    setEntrando(true)
+    setError('')
+    const { error: fallo } = await supabase.auth.signInWithPassword({ email: correo.trim(), password: clave })
+    if (fallo) {
+      setError(
+        /invalid login/i.test(fallo.message)
+          ? 'Correo o contraseña incorrectos.'
+          : esErrorDeRed(fallo)
+            ? 'Sin conexión a internet. Intenta de nuevo.'
+            : fallo.message,
+      )
+    }
+    setEntrando(false)
+  }
+
+  const campo =
+    'w-full rounded-md border border-white/15 bg-[#0b1220] px-3 py-2.5 text-white outline-none focus:border-yellow-400'
+
+  return (
+    <Pantalla>
+      <h1 className="mb-4 text-xl font-bold">Iniciar sesión</h1>
+      <form onSubmit={entrar} className="space-y-4">
+        <label className="block text-sm">
+          <span className="mb-1 block text-gray-300">Correo</span>
+          <input type="email" required autoComplete="email" value={correo} onChange={(e) => setCorreo(e.target.value)} className={campo} />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-gray-300">Contraseña</span>
+          <input type="password" required autoComplete="current-password" value={clave} onChange={(e) => setClave(e.target.value)} className={campo} />
+        </label>
+        {error && (
+          <p role="alert" className="rounded-lg border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={entrando}
+          className="w-full rounded-md bg-yellow-400 py-2.5 font-bold text-black hover:bg-yellow-300 disabled:opacity-50"
+        >
+          {entrando ? 'Entrando...' : 'Entrar'}
+        </button>
+      </form>
+    </Pantalla>
+  )
+}
+
+export default function App() {
+  const [sesion, setSesion] = useState(undefined)
+
+  useEffect(() => {
+    if (!configurado) return
+    supabase.auth.getSession().then(({ data }) => setSesion(data.session))
+    const { data } = supabase.auth.onAuthStateChange((_evento, nueva) => setSesion(nueva))
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  const salir = async () => {
+    await supabase.auth.signOut({ scope: 'local' })
+    borrarDatosLocales()
+  }
+
+  if (!configurado) {
+    return (
+      <Pantalla>
+        <p className="text-sm text-gray-300">
+          Falta configurar Supabase: escribe <strong>VITE_SUPABASE_URL</strong> y <strong>VITE_SUPABASE_ANON_KEY</strong>{' '}
+          en el archivo <strong>.env</strong>.
+        </p>
+      </Pantalla>
+    )
+  }
+  if (sesion === undefined) return <Pantalla><p className="text-sm text-gray-300">Cargando...</p></Pantalla>
+  if (!sesion) return <Ingreso />
+  return <Panel key={sesion.user.id} usuario={sesion.user} onSalir={salir} />
 }

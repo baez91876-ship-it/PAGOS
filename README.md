@@ -14,19 +14,25 @@ Registro de pagos diarios: **Día completo $40.000** y **Medio día $20.000**.
 
 ## Uso
 
-Doble clic en **`iniciar.bat`**: enciende la app y la abre en el navegador. Deja esa ventana abierta mientras la usas.
+Página publicada: https://baez91876-ship-it.github.io/PAGOS/
 
-O desde la terminal:
+Entra con tu correo y contraseña. Funciona en el celular y en el computador.
+
+Para trabajar en el código desde este equipo: doble clic en **`iniciar.bat`**, o:
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Luego abre http://localhost:5173
-
 ## Datos
 
-Los registros se guardan en `data/registros.json`, no en el navegador, así que no se pierden al borrar los datos de navegación. Esa carpeta no se sube a Git porque contiene información personal.
+Los registros se guardan en la nube (Supabase), así que no se pierden al borrar los datos del navegador ni al cambiar de dispositivo. Solo el usuario que inicia sesión puede verlos.
 
-Si el servidor se apaga mientras la página está abierta, los cambios se guardan temporalmente en el navegador y se pasan al archivo automáticamente cuando el servidor vuelve a encenderse.
+Sin internet, los cambios se guardan en el dispositivo y se suben solos cuando vuelve la conexión.
+
+La conexión se configura en `.env` (`VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`). La clave anónima es pública por diseño; los datos están protegidos por la seguridad de filas (RLS) de la tabla.
+
+## Publicación
+
+Cada `git push` a `main` publica la página con GitHub Actions (`.github/workflows/deploy.yml`). En GitHub: **Settings → Pages → Source: GitHub Actions**.
