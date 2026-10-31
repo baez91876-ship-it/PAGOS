@@ -2,6 +2,9 @@ import { MONTOS } from '../src/utilidades/pagos.js'
 import { coleccion } from './db.js'
 
 const SIN_ID = { projection: { _id: 0 } }
+// Además de la propia página (mismo origen), solo la versión publicada en GitHub Pages puede usar la API.
+const ORIGEN_PAGES = 'https://baez91876-ship-it.github.io'
+
 const leerBody = (req) =>
   new Promise((resolve, reject) => {
     let body = ''
@@ -25,11 +28,13 @@ const esFechaValida = (iso) => {
 
 export const manejarApi = async (req, res, next) => {
   if (!req.url?.startsWith('/api/registros')) return next()
-  // Permite que la página publicada en GitHub Pages use esta API desde el mismo PC.
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-  res.setHeader('Access-Control-Allow-Private-Network', 'true')
+  if (req.headers.origin === ORIGEN_PAGES) {
+    res.setHeader('Access-Control-Allow-Origin', ORIGEN_PAGES)
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    res.setHeader('Access-Control-Allow-Private-Network', 'true')
+  }
+  res.setHeader('Vary', 'Origin')
   if (req.method === 'OPTIONS') return res.writeHead(204).end()
 
   let col

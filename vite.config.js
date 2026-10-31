@@ -18,6 +18,8 @@ export default defineConfig({
   server: {
     // La página de GitHub Pages busca la API en este puerto (src/servicios/datos.js).
     port: 5173,
+    // Los permisos CORS de la API los decide servidor/api.js (Vite solo permitiría páginas de localhost).
+    cors: false,
     // La carpeta está en OneDrive, donde los eventos de archivos no siempre llegan; el sondeo evita servir código viejo.
     watch: { usePolling: true, interval: 300 },
   },
