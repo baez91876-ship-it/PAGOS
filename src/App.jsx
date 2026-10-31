@@ -95,7 +95,7 @@ function Opciones({ etiqueta, opciones, valor, onCambiar }) {
           const activo = valor === o.valor
           return (
             <button
-              key={String(o.valor)}
+              key={o.valor}
               type="button"
               role="radio"
               aria-checked={activo}
@@ -110,7 +110,7 @@ function Opciones({ etiqueta, opciones, valor, onCambiar }) {
                 {activo && <Icono d={ICONOS.check} className="h-4 w-4" />}
                 {o.titulo}
               </span>
-              {o.detalle && <span className="text-sm font-normal">{o.detalle}</span>}
+              <span className="text-sm font-normal">{o.detalle}</span>
             </button>
           )
         })}
@@ -199,7 +199,6 @@ export default function App() {
   const [fecha, setFecha] = useState(hoy)
   const [textoFecha, setTextoFecha] = useState(() => formatoFecha(hoy()))
   const [tipo, setTipo] = useState('completo')
-  const [pagado, setPagado] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -336,15 +335,14 @@ export default function App() {
       fecha,
       tipo,
       monto: MONTOS[tipo],
-      pagado,
+      pagado: false,
       motivo: tipo === 'medio' ? motivo.trim() : '',
     }
     try {
       await ejecutar({ accion: 'crear', registro: nuevo }, () => setRegistros((prev) => [...prev, nuevo]))
-      setAviso(`${ETIQUETAS[tipo]} guardado (${pagado ? 'pagado' : 'pendiente'}).`)
+      setAviso(`${ETIQUETAS[tipo]} guardado.`)
       setMotivo('')
       setTipo('completo')
-      setPagado(false)
       elegirFecha(hoy())
       irAMes(hoy())
     } catch {
@@ -559,16 +557,6 @@ export default function App() {
                   />
                 </div>
               )}
-
-              <Opciones
-                etiqueta="Estado del pago"
-                valor={pagado}
-                onCambiar={setPagado}
-                opciones={[
-                  { valor: false, titulo: 'Pendiente' },
-                  { valor: true, titulo: 'Pagado' },
-                ]}
-              />
 
               <button
                 type="submit"

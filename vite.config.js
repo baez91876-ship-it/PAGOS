@@ -8,5 +8,5 @@ export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss(), registrosApi()],
   // La carpeta está en OneDrive, donde los eventos de archivos no siempre llegan; el sondeo evita servir código viejo.
-  server: { watch: { ignored: ['**/data/**'], usePolling: true, interval: 300 } },
+  server: { watch: { usePolling: true, interval: 300 } },
 })

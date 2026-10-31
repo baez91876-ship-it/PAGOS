@@ -4,7 +4,7 @@ Registro de pagos diarios: **Día completo $40.000** y **Medio día $20.000**.
 
 ## Funciones
 
-- Registrar un pago con fecha (se puede escribir como `dd/mm/aaaa` o elegir en el calendario), tipo de día y estado (pendiente o pagado).
+- Registrar un pago con fecha (se puede escribir como `dd/mm/aaaa` o elegir en el calendario) y tipo de día. Se guarda como pendiente.
 - El monto se calcula automáticamente según el tipo de día.
 - El motivo es obligatorio para los medios días.
 - Marcar cada registro como pagado o pendiente, o marcar todo como pagado.
@@ -31,8 +31,6 @@ npm run dev      # para editar el código (http://localhost:5173)
 Los registros se guardan en la base de datos MongoDB local **`PAGOS`**, colección **`registros`**, así que no se pierden al borrar los datos del navegador. Para usar otra dirección o base, define `MONGODB_URI` o `MONGODB_DB`.
 
 Si MongoDB o el servidor están apagados, los cambios se guardan temporalmente en el navegador y se pasan a MongoDB cuando vuelven a encenderse.
-
-Los registros antiguos de `data/registros.json` se importan solos a MongoDB la primera vez (el archivo queda como `registros.json.importado`).
 
 ## GitHub Pages
 

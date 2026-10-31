@@ -1,10 +1,7 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { MongoClient } from 'mongodb'
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017'
 const BASE = process.env.MONGODB_DB || 'PAGOS'
-const ARCHIVO_ANTIGUO = path.resolve(import.meta.dirname, 'data', 'registros.json')
 const MONTOS = { completo: 40000, medio: 20000 }
 const SIN_ID = { projection: { _id: 0 } }
 
@@ -17,24 +14,12 @@ const coleccion = () => {
     await cliente.connect()
     const col = cliente.db(BASE).collection('registros')
     await col.createIndex({ id: 1 }, { unique: true })
-    await importarArchivoAntiguo(col)
     return col
   })().catch((e) => {
     conexion = undefined
     throw e
   })
   return conexion
-}
-
-// Pasa a MongoDB los registros que se guardaban antes en data/registros.json (no duplica).
-const importarArchivoAntiguo = async (col) => {
-  if (!fs.existsSync(ARCHIVO_ANTIGUO)) return
-  const antiguos = JSON.parse(fs.readFileSync(ARCHIVO_ANTIGUO, 'utf8'))
-  if (!Array.isArray(antiguos) || !antiguos.length) return
-  await col.bulkWrite(
-    antiguos.map((r) => ({ updateOne: { filter: { id: r.id }, update: { $setOnInsert: r }, upsert: true } })),
-  )
-  fs.renameSync(ARCHIVO_ANTIGUO, ARCHIVO_ANTIGUO + '.importado')
 }
 
 const leerBody = (req) =>
