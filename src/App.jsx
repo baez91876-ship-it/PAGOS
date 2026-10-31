@@ -60,7 +60,7 @@ export default function App() {
         {sinServidor && (
           <p role="status" className="aviso">
             No hay conexión con la base de datos MongoDB. Los cambios se guardan en este navegador y se pasarán a la base
-            de datos cuando vuelva (ejecuta <strong>npm start</strong> en el PC).
+            de datos cuando vuelva (ejecuta <strong>npm run dev</strong> en el PC).
           </p>
         )}
 
@@ -71,7 +71,7 @@ export default function App() {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)]">
-          <Resumen registros={registros} ocupado={ocupado} onMarcarTodo={() => cambiarPago('', true)} />
+          <Resumen registros={registros} cargando={cargando} ocupado={ocupado} onMarcarTodo={() => cambiarPago('', true)} />
           <FormularioRegistro
             campoFecha={{ fecha, textoFecha, onEscribir: escribirFecha, onAbrir: () => fecha && setVista(mesDe(fecha)), calendario }}
             onGuardar={guardar}

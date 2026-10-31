@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 import { manejarApi } from './servidor/api.js'
 
-// En desarrollo (npm run dev) la API corre dentro del servidor de Vite.
+// `npm run dev` sirve la página y también la API de registros.
 const api = {
   name: 'registros-api',
   configureServer(server) {
@@ -15,6 +15,10 @@ export default defineConfig({
   // Rutas relativas para que funcione en https://baez91876-ship-it.github.io/PAGOS/
   base: './',
   plugins: [react(), tailwindcss(), api],
-  // La carpeta est? en OneDrive, donde los eventos de archivos no siempre llegan; el sondeo evita servir c?digo viejo.
-  server: { watch: { usePolling: true, interval: 300 } },
+  server: {
+    // La página de GitHub Pages busca la API en este puerto (src/servicios/datos.js).
+    port: 5173,
+    // La carpeta está en OneDrive, donde los eventos de archivos no siempre llegan; el sondeo evita servir código viejo.
+    watch: { usePolling: true, interval: 300 },
+  },
 })

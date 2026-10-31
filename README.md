@@ -27,9 +27,8 @@ El usuario y la contraseña son los de **Atlas → Database Access**, y la IP de
 Desde la terminal, en la carpeta del proyecto:
 
 ```powershell
-npm install
-npm start        # página + API en http://localhost:3001 (deja la terminal abierta)
-npm run dev      # para editar el código (http://localhost:5173)
+npm install      # solo la primera vez
+npm run dev      # página + API en http://localhost:5173 (deja la terminal abierta)
 ```
 
 ## Estructura
@@ -46,8 +45,7 @@ src/
   servicios/datos.js       comunicación con la API y respaldo sin conexión
   utilidades/              fechas.js y pagos.js (montos, etiquetas, formato)
 servidor/
-  index.js                 servidor de la página compilada (npm start)
-  api.js                   API /api/registros
+  api.js                   API /api/registros (la atiende npm run dev)
   db.js                    conexión a MongoDB (lee .env.local)
 ```
 
@@ -55,10 +53,10 @@ servidor/
 
 Los registros se guardan en MongoDB Atlas, base **`PAGOS`**, colección **`PAGO`**, así que no se pierden al borrar los datos del navegador.
 
-Si MongoDB o el servidor están apagados, los cambios se guardan temporalmente en el navegador y se pasan a MongoDB cuando vuelven a encenderse.
+Si la conexión con MongoDB o `npm run dev` están apagados, los cambios se guardan temporalmente en el navegador y se pasan a MongoDB cuando vuelven a encenderse.
 
 ## GitHub Pages
 
 Cada `git push` a `main` publica la página en https://baez91876-ship-it.github.io/PAGOS/ con GitHub Actions (**Settings → Pages → Source: GitHub Actions**).
 
-La página publicada lee y guarda en MongoDB a través del servidor de este PC, así que solo muestra los datos si se abre en este PC con `npm start` encendido. Si el navegador pregunta si permite el acceso a la red local, acepta.
+La página publicada lee y guarda en MongoDB a través de `npm run dev` (http://localhost:5173), así que solo muestra los datos si se abre en este PC con `npm run dev` encendido. Si el navegador pregunta si permite el acceso a la red local, acepta.

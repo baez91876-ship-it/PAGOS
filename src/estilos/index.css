@@ -13,6 +13,10 @@ body {
   color-scheme: dark;
 }
 
+html {
+  scrollbar-color: #334155 var(--color-fondo);
+}
+
 .cargando {
   margin: 0;
   padding-top: 40vh;
@@ -63,7 +67,7 @@ body {
   }
 
   .boton-chico {
-    @apply inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50;
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm disabled:opacity-50;
   }
 
   .boton-icono {

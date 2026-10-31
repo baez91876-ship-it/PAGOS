@@ -55,9 +55,9 @@ export default function ListaRegistros({ registros, cargando, ...acciones }) {
   else
     contenido = (
       <>
-        <ul className="space-y-3 md:hidden">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:hidden">
           {registros.map((r) => (
-            <li key={r.id} className="tarjeta">
+            <li key={r.id} className="tarjeta flex flex-col">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold">{formatoFecha(r.fecha)}</p>
@@ -69,14 +69,14 @@ export default function ListaRegistros({ registros, cargando, ...acciones }) {
                 </div>
               </div>
               {r.motivo && <p className="mt-2 text-sm text-gray-300">Motivo: {r.motivo}</p>}
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-auto flex flex-wrap gap-2 pt-3">
                 <Acciones registro={r} {...acciones} />
               </div>
             </li>
           ))}
         </ul>
 
-        <div className="hidden overflow-x-auto md:block">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-white/10 text-gray-400">
               <tr>
