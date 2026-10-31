@@ -33,7 +33,9 @@ function Acciones({ registro: r, ocupado, onCambiarPago, onEliminar }) {
       <button
         type="button"
         disabled={ocupado}
-        onClick={() => onEliminar(r)}
+        onClick={() => {
+          if (window.confirm(`¿Eliminar el registro del ${formatoFecha(r.fecha)} (${ETIQUETAS[r.tipo]})?`)) onEliminar(r.id)
+        }}
         aria-label={`Eliminar registro del ${formatoFecha(r.fecha)}`}
         className="boton-chico border-red-400/40 text-red-300 hover:bg-red-500/15"
       >

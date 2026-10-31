@@ -1,32 +1,7 @@
-import { existsSync } from 'node:fs'
-import { MongoClient } from 'mongodb'
+import { MONTOS } from '../src/utilidades/pagos.js'
+import { coleccion } from './db.js'
 
-// La cadena de conexión de Atlas (con contraseña) vive en .env.local, que no se sube a GitHub.
-const ENV = new URL('../.env.local', import.meta.url)
-if (existsSync(ENV)) process.loadEnvFile(ENV)
-
-const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017'
-const BASE = process.env.MONGODB_DB || 'PAGOS'
-const MONTOS = { completo: 40000, medio: 20000 }
 const SIN_ID = { projection: { _id: 0 } }
-
-let conexion
-
-// Conecta una sola vez; si MongoDB está apagado, el próximo pedido vuelve a intentarlo.
-const coleccion = () => {
-  conexion ??= (async () => {
-    const cliente = new MongoClient(URI, { serverSelectionTimeoutMS: 10000 })
-    await cliente.connect()
-    const col = cliente.db(BASE).collection('registros')
-    await col.createIndex({ id: 1 }, { unique: true })
-    return col
-  })().catch((e) => {
-    conexion = undefined
-    throw e
-  })
-  return conexion
-}
-
 const leerBody = (req) =>
   new Promise((resolve, reject) => {
     let body = ''
@@ -61,7 +36,7 @@ export const manejarApi = async (req, res, next) => {
   try {
     col = await coleccion()
   } catch {
-    return responder(res, 503, { error: 'MongoDB no está encendido' })
+    return responder(res, 503, { error: 'Sin conexión con MongoDB' })
   }
 
   try {
@@ -87,7 +62,7 @@ export const manejarApi = async (req, res, next) => {
     }
 
     if (req.method === 'POST') {
-      const { id: nuevoId, creado, fecha, tipo, motivo, pagado } = JSON.parse(await leerBody(req))
+      const { id: nuevoId, creado, fecha, tipo, motivo } = JSON.parse(await leerBody(req))
       if (!esFechaValida(fecha) || !MONTOS[tipo]) return responder(res, 400, { error: 'Datos inválidos' })
       if (tipo === 'medio' && !String(motivo ?? '').trim()) {
         return responder(res, 400, { error: 'Motivo requerido' })
@@ -99,7 +74,7 @@ export const manejarApi = async (req, res, next) => {
         tipo,
         monto: MONTOS[tipo],
         motivo: tipo === 'medio' ? String(motivo).trim() : '',
-        pagado: pagado === true,
+        pagado: false,
       }
       await col.updateOne({ id: registro.id }, { $setOnInsert: registro }, { upsert: true })
       return responder(res, 201, registro)
@@ -108,17 +83,5 @@ export const manejarApi = async (req, res, next) => {
   } catch (e) {
     console.error(e)
     responder(res, 500, { error: 'Error del servidor' })
-  }
-}
-
-export default function registrosApi() {
-  return {
-    name: 'registros-api',
-    configureServer(server) {
-      server.middlewares.use(manejarApi)
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use(manejarApi)
-    },
   }
 }

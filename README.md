@@ -18,10 +18,11 @@ Requisito: un archivo **`.env.local`** en la carpeta del proyecto con la conexi�
 
 ```
 MONGODB_URI=mongodb+srv://USUARIO:CONTRASEÑA@cluster0.0satleb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-MONGODB_DB=pagos
+MONGODB_DB=PAGOS
+MONGODB_COLECCION=PAGO
 ```
 
-El usuario y la contraseña son los de **Atlas → Database Access**, y la IP del PC debe estar permitida en **Atlas → Network Access**. Sin `.env.local` se usa la MongoDB local (`mongodb://127.0.0.1:27017`, base `PAGOS`).
+El usuario y la contraseña son los de **Atlas → Database Access**, y la IP del PC debe estar permitida en **Atlas → Network Access**. Sin `.env.local` se usa la MongoDB local (`mongodb://127.0.0.1:27017`, base `PAGOS`, colección `registros`).
 
 Desde la terminal, en la carpeta del proyecto:
 
@@ -38,19 +39,21 @@ index.html                 HTML de la página (sin estilos)
 public/favicon.svg         ícono de la pestaña
 src/
   main.jsx                 arranque de React
-  App.jsx                  estado y acciones (crear, pagar, eliminar)
-  componentes/             Resumen, FormularioRegistro, CampoFecha, Calendario, ListaRegistros, Icono
+  App.jsx                  arma la página y maneja la fecha elegida
+  componentes/             Resumen, FormularioRegistro, CampoFecha, Calendario, PanelCalendario, ListaRegistros, Icono
+  hooks/useRegistros.js    registros y acciones (crear, pagar, eliminar)
   estilos/index.css        todo el CSS (Tailwind y clases propias)
   servicios/datos.js       comunicación con la API y respaldo sin conexión
   utilidades/              fechas.js y pagos.js (montos, etiquetas, formato)
 servidor/
   index.js                 servidor de la página compilada (npm start)
-  api.js                   API /api/registros sobre MongoDB
+  api.js                   API /api/registros
+  db.js                    conexión a MongoDB (lee .env.local)
 ```
 
 ## Datos
 
-Los registros se guardan en MongoDB Atlas, base **`pagos`**, colección **`registros`**, así que no se pierden al borrar los datos del navegador.
+Los registros se guardan en MongoDB Atlas, base **`PAGOS`**, colección **`PAGO`**, así que no se pierden al borrar los datos del navegador.
 
 Si MongoDB o el servidor están apagados, los cambios se guardan temporalmente en el navegador y se pasan a MongoDB cuando vuelven a encenderse.
 
