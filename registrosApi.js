@@ -1,4 +1,9 @@
+import { existsSync } from 'node:fs'
 import { MongoClient } from 'mongodb'
+
+// La cadena de conexión de Atlas (con contraseña) vive en .env.local, que no se sube a GitHub.
+const ENV = new URL('./.env.local', import.meta.url)
+if (existsSync(ENV)) process.loadEnvFile(ENV)
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017'
 const BASE = process.env.MONGODB_DB || 'PAGOS'
@@ -10,7 +15,7 @@ let conexion
 // Conecta una sola vez; si MongoDB está apagado, el próximo pedido vuelve a intentarlo.
 const coleccion = () => {
   conexion ??= (async () => {
-    const cliente = new MongoClient(URI, { serverSelectionTimeoutMS: 3000 })
+    const cliente = new MongoClient(URI, { serverSelectionTimeoutMS: 10000 })
     await cliente.connect()
     const col = cliente.db(BASE).collection('registros')
     await col.createIndex({ id: 1 }, { unique: true })
