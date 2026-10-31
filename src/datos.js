@@ -41,11 +41,13 @@ const pedir = async (method, ruta = '', body) => {
 }
 
 export const ejecutarOperacion = (op) => {
+  // Cambios pendientes guardados por la versión anterior: { method, url, body }.
+  if (op.method) return pedir(op.method, String(op.url).replace(/^.*\/api\/registros/, ''), op.body)
   const ruta = op.id ? `/${encodeURIComponent(op.id)}` : ''
   if (op.accion === 'crear') return pedir('POST', '', op.registro)
   if (op.accion === 'pago') return pedir('PATCH', ruta, { pagado: op.pagado })
   if (op.accion === 'eliminar') return pedir('DELETE', ruta)
-  throw new Error(`Operación desconocida: ${op.accion}`)
+  throw Object.assign(new Error(`Operación desconocida: ${op.accion}`), { status: 400 })
 }
 
 // Envía a MongoDB los cambios hechos sin conexión; descarta los que el servidor rechace por datos inválidos.
