@@ -5,5 +5,6 @@ import registrosApi from './registrosApi.js'
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), registrosApi()],
-  server: { watch: { ignored: ['**/data/**'] } },
+  // La carpeta está en OneDrive, donde los eventos de archivos no siempre llegan; el sondeo evita servir código viejo.
+  server: { watch: { ignored: ['**/data/**'], usePolling: true, interval: 300 } },
 })

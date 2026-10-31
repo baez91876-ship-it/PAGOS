@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const API = '/api/registros'
 const MONTOS = { completo: 40000, medio: 20000 }
@@ -34,6 +34,61 @@ const nombreMes = (anio, mes) =>
   `${capitalizar(new Date(anio, mes, 1).toLocaleString('es-CO', { month: 'long' }))} ${anio}`
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
+
+const COLA = 'pagos-cola-sincronizar'
+const RESPALDO = 'pagos-respaldo'
+
+const leerLocal = (clave) => {
+  try {
+    const v = JSON.parse(localStorage.getItem(clave))
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+const guardarLocal = (clave, valor) => {
+  try {
+    localStorage.setItem(clave, JSON.stringify(valor))
+  } catch {
+    // Sin espacio o almacenamiento bloqueado: el archivo del servidor sigue siendo la copia principal.
+  }
+}
+
+// Lanza un error con `status` si el servidor rechazó la petición; sin `status` si no hubo conexión.
+const enviar = async ({ method, url, body }) => {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (method === 'DELETE' && res.status === 404) return null
+  if (!res.ok) throw Object.assign(new Error('Error del servidor'), { status: res.status })
+  return res.json()
+}
+
+// Envía al servidor los cambios hechos mientras no había conexión.
+const sincronizarCola = async () => {
+  const cola = leerLocal(COLA)
+  while (cola.length) {
+    try {
+      await enviar(cola[0])
+    } catch (e) {
+      if (!e.status || e.status >= 500) throw e
+    }
+    cola.shift()
+    guardarLocal(COLA, cola)
+  }
+}
+
+const obtenerRegistros = async () => {
+  try {
+    await sincronizarCola()
+    return { datos: await enviar({ method: 'GET', url: API }), desconectado: false }
+  } catch {
+    return { datos: leerLocal(RESPALDO), desconectado: true }
+  }
+}
 
 // Convierte "dd/mm/aaaa" en "aaaa-mm-dd"; devuelve '' si la fecha no existe.
 const leerFechaEscrita = (texto) => {
@@ -204,6 +259,8 @@ export default function App() {
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [ocupado, setOcupado] = useState('')
+  const [sinServidor, setSinServidor] = useState(false)
+  const [aviso, setAviso] = useState('')
   const [selectorAbierto, setSelectorAbierto] = useState(false)
   const [vista, setVista] = useState(() => {
     const d = new Date()
@@ -211,13 +268,52 @@ export default function App() {
   })
   const refFecha = useRef(null)
 
-  useEffect(() => {
-    fetch(API)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setRegistros)
-      .catch(() => setError('No se pudieron cargar los registros.'))
-      .finally(() => setCargando(false))
+  const aplicarCarga = useCallback(({ datos, desconectado }) => {
+    setRegistros(datos)
+    setSinServidor(desconectado)
+    setCargando(false)
   }, [])
+
+  const recargar = useCallback(() => obtenerRegistros().then(aplicarCarga), [aplicarCarga])
+
+  useEffect(() => {
+    obtenerRegistros().then(aplicarCarga)
+  }, [aplicarCarga])
+
+  useEffect(() => {
+    if (!sinServidor) return
+    const id = setInterval(recargar, 10000)
+    window.addEventListener('online', recargar)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('online', recargar)
+    }
+  }, [sinServidor, recargar])
+
+  useEffect(() => {
+    if (!cargando) guardarLocal(RESPALDO, registros)
+  }, [registros, cargando])
+
+  useEffect(() => {
+    if (!aviso) return
+    const id = setTimeout(() => setAviso(''), 3000)
+    return () => clearTimeout(id)
+  }, [aviso])
+
+  // Si no hay conexión, guarda la operación para enviarla después y aplica el cambio en pantalla.
+  const ejecutar = async (op, aplicarLocal) => {
+    try {
+      const respuesta = await enviar(op)
+      setSinServidor(false)
+      return respuesta
+    } catch (e) {
+      if (e.status) throw e
+      guardarLocal(COLA, [...leerLocal(COLA), op])
+      setSinServidor(true)
+      aplicarLocal()
+      return undefined
+    }
+  }
 
   useEffect(() => {
     if (!selectorAbierto) return
@@ -291,29 +387,28 @@ export default function App() {
     if (tipo === 'medio' && !motivo.trim()) return setError('Escribe el motivo del medio día.')
     setGuardando(true)
     setError('')
+    const nuevo = {
+      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      creado: Date.now(),
+      fecha,
+      tipo,
+      monto: MONTOS[tipo],
+      pagado,
+      motivo: tipo === 'medio' ? motivo.trim() : '',
+    }
     try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: crypto.randomUUID?.() ?? String(Date.now()),
-          creado: Date.now(),
-          fecha,
-          tipo,
-          pagado,
-          motivo: tipo === 'medio' ? motivo.trim() : '',
-        }),
-      })
-      if (!res.ok) throw new Error()
-      const registro = await res.json()
-      setRegistros((prev) => [...prev, registro])
+      const registro = await ejecutar({ method: 'POST', url: API, body: nuevo }, () =>
+        setRegistros((prev) => [...prev, nuevo]),
+      )
+      if (registro) setRegistros((prev) => [...prev, registro])
+      setAviso(`${ETIQUETAS[tipo]} guardado (${pagado ? 'pagado' : 'pendiente'}).`)
       setMotivo('')
       setTipo('completo')
       setPagado(false)
       elegirFecha(hoy())
       irAMes(hoy())
     } catch {
-      setError('No se pudo guardar el registro. Intenta de nuevo.')
+      setError('No se pudo guardar el registro. Revisa los datos e intenta de nuevo.')
     } finally {
       setGuardando(false)
     }
@@ -323,13 +418,11 @@ export default function App() {
     setOcupado(id || 'todos')
     setError('')
     try {
-      const res = await fetch(id ? `${API}/${encodeURIComponent(id)}` : API, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pagado: nuevoEstado }),
-      })
-      if (!res.ok) throw new Error()
-      setRegistros(await res.json())
+      const datos = await ejecutar(
+        { method: 'PATCH', url: id ? `${API}/${encodeURIComponent(id)}` : API, body: { pagado: nuevoEstado } },
+        () => setRegistros((prev) => prev.map((r) => (!id || r.id === id ? { ...r, pagado: nuevoEstado } : r))),
+      )
+      if (datos) setRegistros(datos)
     } catch {
       setError('No se pudo actualizar el estado del pago. Intenta de nuevo.')
     } finally {
@@ -347,8 +440,7 @@ export default function App() {
     setOcupado(r.id)
     setError('')
     try {
-      const res = await fetch(`${API}/${encodeURIComponent(r.id)}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error()
+      await ejecutar({ method: 'DELETE', url: `${API}/${encodeURIComponent(r.id)}` }, () => {})
       setRegistros((prev) => prev.filter((x) => x.id !== r.id))
     } catch {
       setError('No se pudo eliminar el registro. Intenta de nuevo.')
@@ -392,6 +484,13 @@ export default function App() {
           <Icono d={ICONOS.tarjeta} relleno className="h-7 w-7 text-yellow-400" />
           <span className="text-2xl font-extrabold tracking-wide text-yellow-400">PAGOS</span>
         </header>
+
+        {sinServidor && (
+          <p role="status" className="rounded-lg border border-yellow-500 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+            El servidor no está encendido. Los cambios se guardan en este navegador y se pasarán al archivo de datos
+            cuando lo enciendas (doble clic en <strong>iniciar.bat</strong>).
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -541,6 +640,12 @@ export default function App() {
               >
                 {guardando ? 'Guardando...' : 'Guardar Registro'}
               </button>
+              {aviso && (
+                <p role="status" className="flex items-center justify-center gap-1.5 text-sm font-semibold text-yellow-400">
+                  <Icono d={ICONOS.check} className="h-4 w-4" />
+                  {aviso}
+                </p>
+              )}
             </form>
           </section>
 
