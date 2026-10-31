@@ -1,5 +1,5 @@
 // En desarrollo la API está en el mismo servidor de Vite; la página compilada (también la de GitHub Pages)
-// usa el servidor local de servidor.js, que guarda en MongoDB.
+// usa el servidor local (carpeta servidor/), que guarda en MongoDB.
 const API = import.meta.env.DEV ? '/api/registros' : 'http://localhost:3001/api/registros'
 const COLA = 'pagos-cola-sincronizar'
 const RESPALDO = 'pagos-respaldo'

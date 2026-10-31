@@ -23,14 +23,29 @@ MONGODB_DB=pagos
 
 El usuario y la contraseña son los de **Atlas → Database Access**, y la IP del PC debe estar permitida en **Atlas → Network Access**. Sin `.env.local` se usa la MongoDB local (`mongodb://127.0.0.1:27017`, base `PAGOS`).
 
-Doble clic en **`iniciar.bat`**: prepara la página, enciende el servidor y abre http://localhost:3001. Deja esa ventana abierta mientras la usas.
-
-O desde la terminal:
+Desde la terminal, en la carpeta del proyecto:
 
 ```powershell
 npm install
-npm start        # página + API en http://localhost:3001
+npm start        # página + API en http://localhost:3001 (deja la terminal abierta)
 npm run dev      # para editar el código (http://localhost:5173)
+```
+
+## Estructura
+
+```
+index.html                 HTML de la página (sin estilos)
+public/favicon.svg         ícono de la pestaña
+src/
+  main.jsx                 arranque de React
+  App.jsx                  estado y acciones (crear, pagar, eliminar)
+  componentes/             Resumen, FormularioRegistro, CampoFecha, Calendario, ListaRegistros, Icono
+  estilos/index.css        todo el CSS (Tailwind y clases propias)
+  servicios/datos.js       comunicación con la API y respaldo sin conexión
+  utilidades/              fechas.js y pagos.js (montos, etiquetas, formato)
+servidor/
+  index.js                 servidor de la página compilada (npm start)
+  api.js                   API /api/registros sobre MongoDB
 ```
 
 ## Datos
@@ -43,4 +58,4 @@ Si MongoDB o el servidor están apagados, los cambios se guardan temporalmente e
 
 Cada `git push` a `main` publica la página en https://baez91876-ship-it.github.io/PAGOS/ con GitHub Actions (**Settings → Pages → Source: GitHub Actions**).
 
-La página publicada lee y guarda en MongoDB a través del `servidor.js` de este PC, así que solo muestra los datos si se abre en este PC con `iniciar.bat` encendido. Si el navegador pregunta si permite el acceso a la red local, acepta.
+La página publicada lee y guarda en MongoDB a través del servidor de este PC, así que solo muestra los datos si se abre en este PC con `npm start` encendido. Si el navegador pregunta si permite el acceso a la red local, acepta.

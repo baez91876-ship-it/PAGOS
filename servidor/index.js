@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
-import { manejarApi } from './registrosApi.js'
+import { manejarApi } from './api.js'
 
 const PUERTO = Number(process.env.PORT) || 3001
-const DIST = path.resolve(import.meta.dirname, 'dist')
+const DIST = path.resolve(import.meta.dirname, '..', 'dist')
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',

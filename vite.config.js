@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
-import registrosApi from './registrosApi.js'
+import registrosApi from './servidor/api.js'
 
 export default defineConfig({
   // Rutas relativas para que funcione en https://baez91876-ship-it.github.io/PAGOS/

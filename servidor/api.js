@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { MongoClient } from 'mongodb'
 
 // La cadena de conexión de Atlas (con contraseña) vive en .env.local, que no se sube a GitHub.
-const ENV = new URL('./.env.local', import.meta.url)
+const ENV = new URL('../.env.local', import.meta.url)
 if (existsSync(ENV)) process.loadEnvFile(ENV)
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017'
