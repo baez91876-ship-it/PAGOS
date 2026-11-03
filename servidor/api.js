@@ -5,13 +5,20 @@ const SIN_ID = { projection: { _id: 0 } }
 // Además de la propia página (mismo origen), solo la versión publicada en GitHub Pages puede usar la API.
 const ORIGEN_PAGES = 'https://baez91876-ship-it.github.io'
 
-const leerBody = (req) =>
-  new Promise((resolve, reject) => {
+const leerBody = (req) => {
+  // Vercel puede entregar el cuerpo ya procesado, sin datos pendientes en el stream.
+  if (req.body !== undefined) {
+    if (typeof req.body === 'string') return Promise.resolve(req.body)
+    if (Buffer.isBuffer(req.body)) return Promise.resolve(req.body.toString())
+    return Promise.resolve(JSON.stringify(req.body))
+  }
+  return new Promise((resolve, reject) => {
     let body = ''
     req.on('data', (c) => (body += c))
     req.on('end', () => resolve(body))
     req.on('error', reject)
   })
+}
 
 const responder = (res, status, data) => {
   res.statusCode = status

@@ -27,7 +27,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Configurar redirección a Vercel
+        env:
+          VERCEL_URL: ${{ vars.VERCEL_URL }}
+        run: |
+          node --input-type=module -e "
+            const url = new URL(process.env.VERCEL_URL);
+            if (url.protocol !== 'https:' || url.username || url.password) {
+              throw new Error('Configura la variable VERCEL_URL con la URL HTTPS pública de Vercel, sin credenciales.');
+            }
+          "
       - run: npm run build
+        env:
+          VITE_APP_URL: ${{ vars.VERCEL_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

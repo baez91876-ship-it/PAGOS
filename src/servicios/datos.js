@@ -1,6 +1,5 @@
-// La página se abre con `npm run dev`, que también atiende la API. La versión publicada en GitHub Pages
-// usa ese mismo servidor, así que necesita `npm run dev` encendido en este PC.
-const API = import.meta.env.DEV ? '/api/registros' : 'http://localhost:5173/api/registros'
+// En Vercel la página y la API comparten origen; en desarrollo las atiende Vite.
+const API = '/api/registros'
 const COLA = 'pagos-cola-sincronizar'
 const RESPALDO = 'pagos-respaldo'
 

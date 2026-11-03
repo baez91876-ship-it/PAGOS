@@ -16,7 +16,6 @@ export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss(), api],
   server: {
-    // La página de GitHub Pages busca la API en este puerto (src/servicios/datos.js).
     port: 5173,
     // Los permisos CORS de la API los decide servidor/api.js (Vite solo permitiría páginas de localhost).
     cors: false,

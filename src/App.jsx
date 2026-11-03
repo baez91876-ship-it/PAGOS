@@ -60,7 +60,7 @@ export default function App() {
         {sinServidor && (
           <p role="status" className="aviso">
             No hay conexión con la base de datos MongoDB. Los cambios se guardan en este navegador y se pasarán a la base
-            de datos cuando vuelva (ejecuta <strong>npm run dev</strong> en el PC).
+            de datos automáticamente cuando vuelva la conexión.
           </p>
         )}
 
